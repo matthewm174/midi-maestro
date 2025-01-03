@@ -3,7 +3,7 @@ just a little midi piano roll that uses a very simple markov chain to generate 1
 
 this is also a typescript/vue rewrite of the piano roll here https://github.com/g200kg/webaudio-pianoroll using some of the nice features available in vue.
 
-#run
+# run
 npm install
 npm run dev
 
