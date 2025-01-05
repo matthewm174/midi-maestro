@@ -3,12 +3,20 @@ import Pianoroll from './components/pianoroll.vue';
 const actx = ref<AudioContext>();
 
 const pianoRoll = ref<InstanceType<typeof Pianoroll> | null>(null);
-const isMinor = ref(true);
 const midiNotes = Array.from({ length: 128 }, (_, i) => i); // 0-127 midi notes
 
 let melody = [];
-const sequenceAutomated = ref([]);	// default
+interface SequenceStep {
+  t: number;
+  n: any;
+  g: number;
+  f: number;
+}
+const activeOscillators = ref(0);
 
+const sequenceAutomated = ref<SequenceStep[]>([]);	// default
+
+const compositionSteps = ref(32);
 
 const humanReadableNotes = computed(() => {
 	const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -21,9 +29,16 @@ const humanReadableNotes = computed(() => {
 		};
 	});
 });
+// this one is for melody
 const selectedNote = ref(humanReadableNotes.value[60].value);
 
+const selectedBassNote = ref(humanReadableNotes.value[20].value);
+
+const selectedHarmonyNote = ref(humanReadableNotes.value[40].value);
+
 const selectedScale = ref<keyof typeof scaleIntervals>('minor');
+
+
 
 const scaleIntervals: { [key: string]: number[] } = {
 	major: [2, 2, 1, 2, 2, 2, 1],
@@ -54,12 +69,24 @@ let transitionMatrix = [
 ];
 
 const generateMelody = () => {
-	const scale = generateScale(selectedNote.value, isMinor.value);
-	melody = generateMarkovMelody(scale, transitionMatrix);
+	const scale = generateScale(selectedNote.value);
+	const melody = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
 	return melody;
 }
 
-const generateScale = (rootNote: number, isMinor: boolean) => {
+const generateBass = () => {
+	const scale = generateScale(selectedBassNote.value);
+	const bass = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
+	return bass;
+}
+
+const generateHarmony = () => {
+	const scale = generateScale(selectedHarmonyNote.value);
+	const harmony = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
+	return harmony;
+}
+
+const generateScale = (rootNote: number) => {
 	const intervals = scaleIntervals[selectedScale.value];
 	const scale = [rootNote];
 	let currentNote = rootNote;
@@ -100,6 +127,11 @@ const sliderUnits = reactive({
 	release: "s",
 });
 
+const timeBase = ref(16);
+const tempo = ref(80);
+const markEndPos = ref(32);
+const markStartPos = ref(0);
+
 //End TODO
 
 
@@ -111,17 +143,17 @@ const sliderUnits = reactive({
  * @param {number} [steps=16] - The number of steps (notes) in the generated melody. Defaults to 16.
  * @returns {any[]} - The generated melody as an array of notes.
  */
-function generateMarkovMelody(scale: any[], matrix: any[], steps = 16) {
+function generateMarkovMelody(scale: any[], matrix: any[], steps: number) {
 	let melody = [];
 	let currentIndex = Math.floor(Math.random() * scale.length);
 
 	for (let i = 0; i < steps; i++) {
-		
-		if(currentIndex==7){
+
+		if (currentIndex == 7) {
 			//bump or reduce octave randomly when moving onto 8th note
-			
-			for(let i = 0; i < scale.length; i++){
-				let oct = Math.random()>.5?12:-12
+
+			for (let i = 0; i < scale.length; i++) {
+				let oct = Math.random() > .5 ? 12 : -12
 				scale[i] += oct;
 			}
 		}
@@ -145,23 +177,24 @@ function generateMarkovMelody(scale: any[], matrix: any[], steps = 16) {
 }
 
 
-const play = (ev: any) => {
-	if (!actx.value) {
-		actx.value = new AudioContext();
-	}
+
+
+const play = async (ev: any) => {
 	let gain = new GainNode(actx.value);//actx.value.createGain();
-	let osc = new OscillatorNode(actx.value!);
-	osc = actx.value.createOscillator();
+	let osc = new OscillatorNode(actx.value);
+	// osc = actx.value.createOscillator();
 	osc.onended = () => { // cleanup hook at end of playback
+		activeOscillators.value--;
 		osc.disconnect();
 		gain.disconnect();
 	};
+	
 	osc.type = selectedOscType.value as OscillatorType;
 	osc.connect(gain).connect(actx.value.destination); // connect to output
 	osc.detune.setValueAtTime((ev.n - 69) * 100, ev.t); // note pitch
 	gain.gain.linearRampToValueAtTime(0, ev.t);// init at 0
 
-	let baseDuration = ev.t + (ev.g / 16 / 100);
+	let baseDuration = ev.t + (ev.g / tempo.value / 4); // base note
 	// ADSR
 
 	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, baseDuration +
@@ -175,6 +208,7 @@ const play = (ev: any) => {
 		+ adsrParams.attack.time + adsrParams.decay.time
 		+ adsrParams.sustain.time + adsrParams.release.time); // Release
 	osc.start(ev.t);
+	activeOscillators.value++;
 	//end slightly after to taper
 	osc.stop(ev.t + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time + .1);
 };
@@ -191,10 +225,24 @@ const handleStop = (): void => {
 
 const handleRandom = (): void => {
 	const melody = generateMelody();
-	console.log(melody);
+	// const melody = generateMelody();
+	const bass = generateBass();
+	const harmony = generateHarmony();
+	
 	for (let i = 0; i < melody.length; i++) {
 		sequenceAutomated.value[i] = { t: i, n: melody[i], g: 1, f: 0 };
 	}
+	for(let i = 0; i < bass.length; i++) {
+		sequenceAutomated.value[i + melody.length] = { t: i, n: bass[i], g: 1, f: 0 };
+	}
+
+	for(let i = 0; i < harmony.length; i++) {
+		sequenceAutomated.value[i + bass.length + melody.length] = { t: i, n: harmony[i], g: 1, f: 0 };
+	}
+	console.log(melody);
+	console.log(bass);
+	console.log(harmony);
+	
 }
 
 const handlePlay = (): void => {
@@ -209,7 +257,7 @@ const handlePlay = (): void => {
  * this method is called when a note is played from the pianoroll
  * @param ev 
  */
-const Callback = (ev: any) => {
+const Callback = async (ev: any) => {
 
 	playOsc1(ev);
 }
@@ -218,11 +266,12 @@ const Callback = (ev: any) => {
  * init audio context and oscillator(s) - wip
  */
 onMounted(() => {
+	actx.value = new AudioContext();
 
-	actx.value = new (window.AudioContext)();
+	// actx.value = new (window.AudioContext)();
 });
 
-function playOsc1(ev: any) {
+const playOsc1 = async (ev: any) => {
 	play(ev);
 }
 </script>
@@ -232,7 +281,8 @@ function playOsc1(ev: any) {
 <template>
 	<div>
 		<Pianoroll ref="pianoRoll" :playCallback="Callback" :pianoHeight="700" :pianoWidth="300"
-			:sequence="sequenceAutomated">
+			:sequence="sequenceAutomated" :tempo="tempo" :xRange="200" :yRange="200" :xOffset="0" :yOffset="2"
+			:timeBase="timeBase" :markEndPos="compositionSteps" :markStartPos="0">
 		</Pianoroll>
 
 		<button label="Play" @click="handlePlay">PLAY</button>
@@ -246,7 +296,6 @@ function playOsc1(ev: any) {
 					:step="sliderRanges[param].step" v-model.number="value.time" />
 				<span>{{ param }} time: {{ value.time }}</span>
 			</div>
-
 		</div>
 		<div>
 			<h1>Osc Settings</h1>
@@ -259,7 +308,23 @@ function playOsc1(ev: any) {
 		</div>
 		<h1>Generative Settings</h1>
 		<div>
-			<label for="rootNote">Select Root Note:</label>
+			<label for="rootNote">Select Bass Root Note:</label>
+			<select id="rootNote" v-model="selectedBassNote">
+				<option v-for="note in humanReadableNotes" :key="note.value" :value="note.value">
+					{{ note.label }}
+				</option>
+			</select>
+		</div>
+		<div>
+			<label for="rootNote">Select Harmony Root Note:</label>
+			<select id="rootNote" v-model="selectedHarmonyNote">
+				<option v-for="note in humanReadableNotes" :key="note.value" :value="note.value">
+					{{ note.label }}
+				</option>
+			</select>
+		</div>
+		<div>
+			<label for="rootNote">Select Melody Root Note:</label>
 			<select id="rootNote" v-model="selectedNote">
 				<option v-for="note in humanReadableNotes" :key="note.value" :value="note.value">
 					{{ note.label }}
@@ -274,6 +339,21 @@ function playOsc1(ev: any) {
 				</option>
 			</select>
 		</div>
-
+		<div>
+			<label for="compositionSteps">Composition Steps:</label>
+			<input id="compositionSteps" type="number" v-model="compositionSteps" />
+		</div>
+		<div>
+			<label for="tempo">Tempo:</label>
+			<input id="tempo" type="number" v-model="tempo" />
+		</div>
+		<div>
+			<label for="timeBase">Time Base:</label>
+			<input id="timeBase" type="number" v-model="timeBase" />
+		</div>
+		<div>
+			activeOscillators
+			{{ activeOscillators }}
+		</div>
 	</div>
 </template>

@@ -52,9 +52,9 @@ const height = ref(320);
 const timebase = ref(16);
 const editmode = ref('dragpoly');
 const xrange = ref(16);
-const yrange = ref(160);
+const yrange = ref(127);
 const xoffset = ref(0);
-const yoffset = ref(20);
+const yoffset = ref(0); 
 const grid = ref(4);
 const snap = ref(1);
 const xscroll = ref(0);
@@ -106,20 +106,45 @@ const props = defineProps<{
     pianoWidth: number;
     pianoHeight: number;
     sequence: Note[];
+    yOffset: number;
+    xOffset: number;
+    yRange: number;
+    markEndPos: number;
+    markStartPos: number;
+    xRange: number;
+    tempo: number;
+    timeBase: number;
 }>();
 
 
 
 watch(() => width.value, () => layout());
 watch(() => height.value, () => layout());
-watch(() => timebase.value, () => layout());
-watch(() => xrange.value, () => layout());
-watch(() => yrange.value, () => layout());
-watch(() => tempo.value, () => updateTimer());
+watch(() => props.timeBase, () => {
+    timebase.value = props.timeBase;
+    layout();
+});
+
+watch(() => xoffset.value, () => {
+    layout();
+});
+watch(() => yoffset.value, () => {
+    layout();
+});
+watch(() => props.xRange, () => {
+    xrange.value = props.xRange;
+    layout();
+});
+watch(() => props.yRange, () => {
+    yrange.value = props.yRange;
+    layout();
+});
+watch(() => props.tempo, () => {
+    tempo.value = props.tempo;
+    updateTimer();
+});
 watch(() => props.sequence, () => {
     sequence.value = props.sequence;
-    console.log('sequence changed');
-    console.log(sequence.value);
     layout();
     redraw();
 }, { deep: true });
@@ -129,6 +154,12 @@ watch(() => props.pianoHeight, () => {
     layout();
     redraw();
 }, { deep: true });
+
+watch(() => props.tempo, () => {
+    tempo.value = props.tempo;
+    updateTimer();
+});
+
 watch(() => gridnoteratio.value, () => {
     updateTimer()
 });
@@ -159,6 +190,12 @@ onMounted(() => {
     sequence.value = props.sequence;
     width.value = window.innerWidth;
     height.value = props.pianoHeight;
+    tempo.value = props.tempo;
+    timebase.value = props.timeBase;
+    xrange.value = props.xRange;
+    yrange.value = props.yRange;
+    yoffset.value = props.yOffset;
+    xoffset.value = props.xOffset;
     // height.value = window.innerHeight;
     if (pianoRollCanvas.value) {
         rcTarget.value = pianoRollCanvas.value.getBoundingClientRect();
@@ -736,6 +773,8 @@ const editGridDown = (pos: { x: number; y: number }): void => {
 
 
 const handleWheel = (ev: any) => {
+    ev.stopPropagation();
+    ev.preventDefault();
     if (ev.deltaY > 0) {
         //up
         if (ctrlDown.value) {
@@ -758,6 +797,7 @@ const handleWheel = (ev: any) => {
             }
         }
     }
+    redraw();
 }
 
 
@@ -1011,10 +1051,16 @@ function interval() {
             if (editmode.value == "gridmono" || editmode.value == "gridpoly") {
                 gmax *= gridnoteratio.value;
             }
-            const callbackev = { t: time1.value, g: time1.value + gmax * tick2time.value, n: e.n };
+            //  { t: time1.value, g: time1.value + gmax * tick2time.value, n: e.n };
             //call back to whatever is playing the notes
             // console.log(sequence.value)
-            props.playCallback(callbackev);
+            sequence.value.filter(obj => obj.t === e.t).forEach(obj => 
+            {
+                const callbackev = { t: time1.value, g: time1.value + gmax * tick2time.value, n: e.n };
+                props.playCallback(callbackev);
+                // obj.playCallback(callbackev);
+            });
+            // props.playCallback(callbackev);
             e = sequence.value[++index1.value];
             if (!e || e.t >= markendPos.value) {
                 time1.value += (markendPos.value - tick1.value) * tick2time.value;
@@ -1055,7 +1101,7 @@ const play = (actx: AudioContext, tick?: number) => {
     }
 
     // Set the interval
-    timer.value = setInterval(() => interval(), 1);
+    timer.value = setInterval(() => interval(), 25);
 };
 
 defineExpose({ play, stop });
