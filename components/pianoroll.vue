@@ -1056,7 +1056,7 @@ function interval() {
             // console.log(sequence.value)
             sequence.value.filter(obj => obj.t === e.t).forEach(obj => 
             {
-                const callbackev = { t: time1.value, g: time1.value + gmax * tick2time.value, n: e.n };
+                const callbackev = { t: time1.value, g: time1.value + gmax * tick2time.value, n: obj.n };
                 props.playCallback(callbackev);
                 // obj.playCallback(callbackev);
             });
