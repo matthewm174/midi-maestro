@@ -12,17 +12,21 @@ const NoteDurations = {
   Half: 8,
   Quarter: 4,
   Eighth: 2,
-  EighthTriplet: 3/2,
+//   EighthTriplet: 3/2,
   Sixteenth: 1,
 };
 
-
+// add to types later
 interface SequenceStep {
   t: number;
   n: any;
   g: number;
   f: number;
 }
+
+
+
+const selectedScale = ref<keyof typeof scaleIntervals>('minor');
 
 
 const activeOscillators = ref(0);
@@ -37,20 +41,14 @@ const humanReadableNotes = computed(() => {
 		const octave = Math.floor(noteNumber / 12) - 1;
 		const noteName = noteNames[noteNumber % 12];
 		return {
-			value: noteNumber, // MIDI note number
-			label: `${noteName}${octave}`, // Human-readable note (e.g., C4)
+			value: noteNumber,
+			label: `${noteName}${octave}`,
 		};
 	});
 });
-// this one is for melody
 const selectedNote = ref(humanReadableNotes.value[48].value);
-
 const selectedBassNote = ref(humanReadableNotes.value[24].value);
-
 const selectedHarmonyNote = ref(humanReadableNotes.value[12].value);
-
-const selectedScale = ref<keyof typeof scaleIntervals>('minor');
-
 
 
 const scaleIntervals: { [key: string]: number[] } = {
@@ -82,14 +80,12 @@ let transitionMatrix = [
 ];
 
 const rhyTransitionMatrix = {
-  Whole: { Whole: 0.1, Half: 0.4, Quarter: 0.3, Eighth: 0.1, EighthTriplet: 0.05, Sixteenth: 0.05 },
-  Half: { Whole: 0.2, Half: 0.3, Quarter: 0.4, Eighth: 0.05, EighthTriplet: 0.025, Sixteenth: 0.025 },
-  Quarter: { Whole: 0.05, Half: 0.1, Quarter: 0.4, Eighth: 0.3, EighthTriplet: 0.1, Sixteenth: 0.05 },
-  Eighth: { Whole: 0.02, Half: 0.05, Quarter: 0.2, Eighth: 0.5, EighthTriplet: 0.2, Sixteenth: 0.03 },
-  EighthTriplet: { Whole: 0.01, Half: 0.03, Quarter: 0.1, Eighth: 0.3, EighthTriplet: 0.5, Sixteenth: 0.06 },
-  Sixteenth: { Whole: 0.01, Half: 0.02, Quarter: 0.05, Eighth: 0.1, EighthTriplet: 0.1, Sixteenth: 0.72 },
+  Whole: { Whole: 0.1, Half: 0.4, Quarter: 0.3, Eighth: 0.2, Sixteenth: 0.0 },
+  Half: { Whole: 0.2, Half: 0.3, Quarter: 0.4, Eighth: 0.1, Sixteenth: 0.0 },
+  Quarter: { Whole: 0.05, Half: 0.1, Quarter: 0.4, Eighth: 0.3, Sixteenth: 0.15 },
+  Eighth: { Whole: 0.02, Half: 0.05, Quarter: 0.2, Eighth: 0.5, Sixteenth: 0.23 },
+  Sixteenth: { Whole: 0.01, Half: 0.02, Quarter: 0.05, Eighth: 0.1, Sixteenth: 0.82 },
 };
-
 const generateMelody = () => {
 	const scale = generateScale(selectedNote.value+12);
 	const melody = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "melody");
@@ -166,10 +162,6 @@ const markStartPos = ref(0);
  * @returns {any[]} - The generated melody as an array of notes.
  */
 function generateMarkovMelody(scale: any[], matrix: any[], steps: number, type: string) {
-	let rhythm: SequenceStep[] = [];
-
-	// const rhy = generateRhythm("Whole", steps)
-	let intervalbase = 1;
 	if(type == "melody") {
 		 
 	} else if(type == "bass") {
@@ -228,7 +220,7 @@ function generateRhythm(startState: keyof typeof NoteDurations, stepLimit: numbe
   return rhythm;
 }
 
-function selectNextState(currentState) {
+function selectNextState(currentState: keyof typeof NoteDurations) {
   const probabilities = rhyTransitionMatrix[currentState];
   const random = Math.random();
   let cumulative = 0;
@@ -289,26 +281,19 @@ const handleStop = (): void => {
 
 const handleRandom = (): void => {
 	const melody = generateMelody();
-	// const melody = generateMelody();
 	const bass = generateBass();
 	const harmony = generateHarmony();
 	const rhy1 = generateRhythm("Whole", compositionSteps.value);
 	
-	for (let i=0, j=0; j< melody.length && i < melody.length;j+=rhy1[i], i++) {
-		sequenceAutomated.value[i] = { t: j, n: melody[i], g: rhy1[i], f: 0 };
-		sequenceAutomated.value[i + melody.length] = { t: j, n: bass[i], g: rhy1[i], f: 0 };
-		sequenceAutomated.value[i + bass.length + melody.length] = { t: j, n: harmony[i], g: rhy1[i], f: 0 };
+	for (let i=0, j=0; j < melody.length && i < melody.length;j+=rhy1[i], i++) {
+		sequenceAutomated.value[i] = { t: j, n: melody[i], g: rhy1[i%rhy1.length], f: 0 };
+		sequenceAutomated.value[i + rhy1.length] = { t: j, n: bass[i], g: rhy1[i%rhy1.length], f: 0 };
+		sequenceAutomated.value[i + rhy1.length*2] = { t: j, n: harmony[i], g: rhy1[i%rhy1.length], f: 0 };
 	}
-	// for(let i=0, j=0; j< bass.length && i < bass.length;j+=rhy1[i], i++) {
-	// 	sequenceAutomated.value[i + melody.length] = { t: j, n: rhy1[i], g: 1, f: 0 }; // appends on the same ticks
-	// }
-
-	// for(let i=0, j=0; j< harmony.length && i < harmony.length;j+=rhy1[i], i++) {
-	// 	sequenceAutomated.value[i + bass.length + melody.length] = { t: i, n: rhy1[i], g: 1, f: 0 };
-	// }
 	console.log(melody);
 	console.log(bass);
 	console.log(harmony);
+	console.log(sequenceAutomated.value);
 	
 }
 

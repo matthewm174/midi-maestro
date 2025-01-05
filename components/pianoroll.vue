@@ -88,19 +88,12 @@ const time0 = ref(0);
 const time1 = ref(0);
 const tick0 = ref(0);
 const tick1 = ref(0);
-const tempo = ref(120); // Example default tempo
+const tempo = ref(120);
 const markstartPos = ref(0);
 const markendPos = ref(32);
-// const preload = ref(0.0);
 const index1 = ref(0);
 const tick2time = ref(0);
 
-// watch(() => width.value, () => layout());
-// watch(windowWidth, (newValue, oldValue) => {
-//       console.log(`Window width changed from ${oldValue} to ${newValue}`);
-//       width.value = windowWidth.value;
-//       // Add your logic here
-//     });
 const props = defineProps<{
     playCallback: (event: { t: number, g: number, n: number }) => void;
     pianoWidth: number;
@@ -251,7 +244,7 @@ const hitTest = (pos: { x: number; y: number; t?: any }): { t: number; n: number
     for (let i = 0; i < l; ++i) {
         const ev = sequence.value[i];
 
-        if ((ht.n | 0) === ev.n) {
+        if (ev && (ht.n|0) == ev.n  ) {
             if (ev.f && Math.abs(ev.t - ht.t) * stepw.value < 8) {
                 ht.m = "B"; // this block sets the hitbox for the beginning of a note
                 ht.i = i;
