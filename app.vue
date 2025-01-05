@@ -6,17 +6,30 @@ const pianoRoll = ref<InstanceType<typeof Pianoroll> | null>(null);
 const midiNotes = Array.from({ length: 128 }, (_, i) => i); // 0-127 midi notes
 
 let melody = [];
+
+const NoteDurations = {
+  Whole: 16,
+  Half: 8,
+  Quarter: 4,
+  Eighth: 2,
+  EighthTriplet: 3/2,
+  Sixteenth: 1,
+};
+
+
 interface SequenceStep {
   t: number;
   n: any;
   g: number;
   f: number;
 }
+
+
 const activeOscillators = ref(0);
 
 const sequenceAutomated = ref<SequenceStep[]>([]);	// default
 
-const compositionSteps = ref(32);
+const compositionSteps = ref(32*4);
 
 const humanReadableNotes = computed(() => {
 	const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -30,11 +43,11 @@ const humanReadableNotes = computed(() => {
 	});
 });
 // this one is for melody
-const selectedNote = ref(humanReadableNotes.value[60].value);
+const selectedNote = ref(humanReadableNotes.value[48].value);
 
-const selectedBassNote = ref(humanReadableNotes.value[20].value);
+const selectedBassNote = ref(humanReadableNotes.value[24].value);
 
-const selectedHarmonyNote = ref(humanReadableNotes.value[40].value);
+const selectedHarmonyNote = ref(humanReadableNotes.value[12].value);
 
 const selectedScale = ref<keyof typeof scaleIntervals>('minor');
 
@@ -68,21 +81,30 @@ let transitionMatrix = [
 	[0.2, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1], // octave
 ];
 
+const rhyTransitionMatrix = {
+  Whole: { Whole: 0.1, Half: 0.4, Quarter: 0.3, Eighth: 0.1, EighthTriplet: 0.05, Sixteenth: 0.05 },
+  Half: { Whole: 0.2, Half: 0.3, Quarter: 0.4, Eighth: 0.05, EighthTriplet: 0.025, Sixteenth: 0.025 },
+  Quarter: { Whole: 0.05, Half: 0.1, Quarter: 0.4, Eighth: 0.3, EighthTriplet: 0.1, Sixteenth: 0.05 },
+  Eighth: { Whole: 0.02, Half: 0.05, Quarter: 0.2, Eighth: 0.5, EighthTriplet: 0.2, Sixteenth: 0.03 },
+  EighthTriplet: { Whole: 0.01, Half: 0.03, Quarter: 0.1, Eighth: 0.3, EighthTriplet: 0.5, Sixteenth: 0.06 },
+  Sixteenth: { Whole: 0.01, Half: 0.02, Quarter: 0.05, Eighth: 0.1, EighthTriplet: 0.1, Sixteenth: 0.72 },
+};
+
 const generateMelody = () => {
-	const scale = generateScale(selectedNote.value);
-	const melody = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
+	const scale = generateScale(selectedNote.value+12);
+	const melody = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "melody");
 	return melody;
 }
 
 const generateBass = () => {
-	const scale = generateScale(selectedBassNote.value);
-	const bass = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
+	const scale = generateScale(selectedNote.value-24);
+	const bass = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "bass");
 	return bass;
 }
 
 const generateHarmony = () => {
-	const scale = generateScale(selectedHarmonyNote.value);
-	const harmony = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value);
+	const scale = generateScale(selectedNote.value-0);
+	const harmony = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "harmony");
 	return harmony;
 }
 
@@ -143,20 +165,32 @@ const markStartPos = ref(0);
  * @param {number} [steps=16] - The number of steps (notes) in the generated melody. Defaults to 16.
  * @returns {any[]} - The generated melody as an array of notes.
  */
-function generateMarkovMelody(scale: any[], matrix: any[], steps: number) {
-	let melody = [];
+function generateMarkovMelody(scale: any[], matrix: any[], steps: number, type: string) {
+	let rhythm: SequenceStep[] = [];
+
+	// const rhy = generateRhythm("Whole", steps)
+	let intervalbase = 1;
+	if(type == "melody") {
+		 
+	} else if(type == "bass") {
+		
+	} else if(type == "harmony") {
+
+	}
+
+	let melody: SequenceStep[] = [];
 	let currentIndex = Math.floor(Math.random() * scale.length);
 
 	for (let i = 0; i < steps; i++) {
 
 		if (currentIndex == 7) {
-			//bump or reduce octave randomly when moving onto 8th note
-
-			for (let i = 0; i < scale.length; i++) {
+			// this just bumps or dec octave
+			for (let x = 0; x < scale.length; x++) {
 				let oct = Math.random() > .5 ? 12 : -12
-				scale[i] += oct;
+				scale[x] += oct;
 			}
 		}
+		
 		melody.push(scale[currentIndex]);
 
 		// Choose next note based on probabilities
@@ -176,8 +210,36 @@ function generateMarkovMelody(scale: any[], matrix: any[], steps: number) {
 	return melody;
 }
 
+function generateRhythm(startState: keyof typeof NoteDurations, stepLimit: number) {
+  const rhythm = [];
+  let currentState = startState;
+  let totalSteps = 0;
 
+  while (totalSteps < stepLimit) {
+    const duration = NoteDurations[currentState];
+    if (totalSteps + duration > stepLimit) break;
 
+    rhythm.push(duration);
+    totalSteps += duration;
+
+    currentState = selectNextState(currentState);
+  }
+
+  return rhythm;
+}
+
+function selectNextState(currentState) {
+  const probabilities = rhyTransitionMatrix[currentState];
+  const random = Math.random();
+  let cumulative = 0;
+
+  for (const [state, probability] of Object.entries(probabilities)) {
+    cumulative += probability;
+    if (random < cumulative) {
+      return state;
+    }
+  }
+}
 
 const play = async (ev: any) => {
 	let gain = new GainNode(actx.value);//actx.value.createGain();
@@ -195,11 +257,11 @@ const play = async (ev: any) => {
 	osc.frequency.setValueAtTime(frequency, ev.t); // note pitch
 	gain.gain.linearRampToValueAtTime(0, ev.t);// init at 0
 
-	let baseDuration = ev.t 
+	let baseDuration = ev.t + (ev.g-ev.t)
 	//+ (ev.g / tempo.value / 4); // base note
 	// ADSR
 
-	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, baseDuration +
+	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, baseDuration*1000 +
 		adsrParams.attack.time); // Attack
 	gain.gain.linearRampToValueAtTime(adsrParams.decay.volume, baseDuration +
 		adsrParams.attack.time + adsrParams.decay.time); // Decay
@@ -212,7 +274,7 @@ const play = async (ev: any) => {
 	osc.start(ev.t);
 	activeOscillators.value++;
 	//end slightly after to taper
-	osc.stop(ev.t + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time + .1);
+	osc.stop(baseDuration + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time + .1);
 };
 
 
@@ -230,17 +292,20 @@ const handleRandom = (): void => {
 	// const melody = generateMelody();
 	const bass = generateBass();
 	const harmony = generateHarmony();
+	const rhy1 = generateRhythm("Whole", compositionSteps.value);
 	
-	for (let i = 0; i < melody.length; i++) {
-		sequenceAutomated.value[i] = { t: i, n: melody[i], g: 1, f: 0 };
+	for (let i=0, j=0; j< melody.length && i < melody.length;j+=rhy1[i], i++) {
+		sequenceAutomated.value[i] = { t: j, n: melody[i], g: rhy1[i], f: 0 };
+		sequenceAutomated.value[i + melody.length] = { t: j, n: bass[i], g: rhy1[i], f: 0 };
+		sequenceAutomated.value[i + bass.length + melody.length] = { t: j, n: harmony[i], g: rhy1[i], f: 0 };
 	}
-	for(let i = 0; i < bass.length; i++) {
-		sequenceAutomated.value[i + melody.length] = { t: i, n: bass[i], g: 1, f: 0 };
-	}
+	// for(let i=0, j=0; j< bass.length && i < bass.length;j+=rhy1[i], i++) {
+	// 	sequenceAutomated.value[i + melody.length] = { t: j, n: rhy1[i], g: 1, f: 0 }; // appends on the same ticks
+	// }
 
-	for(let i = 0; i < harmony.length; i++) {
-		sequenceAutomated.value[i + bass.length + melody.length] = { t: i, n: harmony[i], g: 1, f: 0 };
-	}
+	// for(let i=0, j=0; j< harmony.length && i < harmony.length;j+=rhy1[i], i++) {
+	// 	sequenceAutomated.value[i + bass.length + melody.length] = { t: i, n: rhy1[i], g: 1, f: 0 };
+	// }
 	console.log(melody);
 	console.log(bass);
 	console.log(harmony);
