@@ -128,7 +128,7 @@ const sliderUnits = reactive({
 });
 
 const timeBase = ref(16);
-const tempo = ref(80);
+const tempo = ref(40);
 const markEndPos = ref(32);
 const markStartPos = ref(0);
 
@@ -191,12 +191,12 @@ const play = async (ev: any) => {
 	
 	osc.type = selectedOscType.value as OscillatorType;
 	osc.connect(gain).connect(actx.value.destination); // connect to output
-	// osc.detune.setValueAtTime((ev.n - 69) * 440, ev.t); // note pitch
 	let frequency = 440 * Math.pow(2, (ev.n - 69) / 12);
 	osc.frequency.setValueAtTime(frequency, ev.t); // note pitch
 	gain.gain.linearRampToValueAtTime(0, ev.t);// init at 0
 
-	let baseDuration = ev.t + (ev.g / tempo.value / 4); // base note
+	let baseDuration = ev.t 
+	//+ (ev.g / tempo.value / 4); // base note
 	// ADSR
 
 	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, baseDuration +
