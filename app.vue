@@ -5,25 +5,25 @@ const actx = ref<AudioContext>();
 const pianoRoll = ref<InstanceType<typeof Pianoroll> | null>(null);
 const midiNotes = Array.from({ length: 128 }, (_, i) => i); // 0-127 midi notes
 
-let melody = [];
-
 const NoteDurations = {
-  Whole: 16,
-  Half: 8,
-  Quarter: 4,
-  Eighth: 2,
-//   EighthTriplet: 3/2,
-  Sixteenth: 1,
+	Whole: 16,
+	Half: 8,
+	// QuartDot: 6,
+	Quarter: 4,
+	Eighth: 2,
+	// EighthTriplet: 3/2, leaving complicated rhythms for later
+	Sixteenth: 1,
 };
 
 // add to types later
 interface SequenceStep {
-  t: number;
-  n: any;
-  g: number;
-  f: number;
+	t: number;
+	n: number;
+	g: number;
+	f: number;
 }
 
+const totalScaleNotes = ref<number[]>([]);
 
 
 const selectedScale = ref<keyof typeof scaleIntervals>('minor');
@@ -32,8 +32,9 @@ const selectedScale = ref<keyof typeof scaleIntervals>('minor');
 const activeOscillators = ref(0);
 
 const sequenceAutomated = ref<SequenceStep[]>([]);	// default
+const sequenceAutomatedPreLoop = ref<SequenceStep[]>([]);	// default
 
-const compositionSteps = ref(32*4);
+const compositionSteps = ref(32 * 4 * 4);
 
 const humanReadableNotes = computed(() => {
 	const noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -46,9 +47,9 @@ const humanReadableNotes = computed(() => {
 		};
 	});
 });
-const selectedNote = ref(humanReadableNotes.value[48].value);
-const selectedBassNote = ref(humanReadableNotes.value[24].value);
-const selectedHarmonyNote = ref(humanReadableNotes.value[12].value);
+const selectedNote = ref(humanReadableNotes.value[36].value);
+const selectedBassNote = ref(humanReadableNotes.value[36].value);
+const selectedHarmonyNote = ref(humanReadableNotes.value[36].value);
 
 
 const scaleIntervals: { [key: string]: number[] } = {
@@ -65,6 +66,12 @@ const scaleIntervals: { [key: string]: number[] } = {
 };
 
 
+const rockGenre = {
+  fifth: 0.75,
+  third: 0.2,
+  both: 0.05,
+};
+
 let transitionMatrix = [
 	// c minor 7 notes of transition for markov chain... 
 	// i need to add the learning function since this is sort of magic number-y - 
@@ -76,54 +83,75 @@ let transitionMatrix = [
 	[0.2, 0.1, 0.1, 0.3, 0.1, 0.2, 0.0], // G
 	[0.1, 0.2, 0.1, 0.1, 0.3, 0.1, 0.1], // Ab
 	[0.1, 0.1, 0.3, 0.2, 0.1, 0.1, 0.1], // Bb
-	[0.2, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1], // octave
 ];
 
-const rhyTransitionMatrix = {
-  Whole: { Whole: 0.1, Half: 0.4, Quarter: 0.3, Eighth: 0.2, Sixteenth: 0.0 },
-  Half: { Whole: 0.2, Half: 0.3, Quarter: 0.4, Eighth: 0.1, Sixteenth: 0.0 },
-  Quarter: { Whole: 0.05, Half: 0.1, Quarter: 0.4, Eighth: 0.3, Sixteenth: 0.15 },
-  Eighth: { Whole: 0.02, Half: 0.05, Quarter: 0.2, Eighth: 0.5, Sixteenth: 0.23 },
-  Sixteenth: { Whole: 0.01, Half: 0.02, Quarter: 0.05, Eighth: 0.1, Sixteenth: 0.82 },
+const bassTransitionMatrix = {
+	Whole: { Whole: 0.5, Half: 0.4, Quarter: 0.10, Eighth: 0.0,  Sixteenth: 0.0 },
+	Half: { Whole: 0.2, Half: 0.3, Quarter: 0.50, Eighth: 0.0,  Sixteenth: 0.0 },
+	Quarter: { Whole: 0.3, Half: 0.2, Quarter: 0.5, Eighth: 0.0,  Sixteenth: 0.0 },
+	Eighth: { Whole: 0.0, Half: 0.0, Quarter: 1.0, Eighth: 0.0,  Sixteenth: 0.0 },
+	Sixteenth: { Whole: 0.0, Half: 0.0, Quarter: 1.0, Eighth: 0.0, Sixteenth: 0.00 },
 };
-const generateMelody = () => {
-	const scale = generateScale(selectedNote.value+12);
-	const melody = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "melody");
+
+const rootTransitionMatrix = {
+	Whole: { Whole: 0.2, Half: 0.4, Quarter: 0.15, Eighth: 0.25,  Sixteenth: 0.0 },
+	Half: { Whole: 0.2, Half: 0.15, Quarter: 0.40, Eighth: 0.25,  Sixteenth: 0.0 },
+	Quarter: { Whole: 0.3, Half: 0.2, Quarter: 0.25, Eighth: 0.25,  Sixteenth: 0.0 },
+	Eighth: { Whole: 0.4, Half: 0.1, Quarter: 0.25, Eighth: 0.25,  Sixteenth: 0.0 },
+	Sixteenth: { Whole: 0.2, Half: 0.15, Quarter: 0.40, Eighth: 0.25, Sixteenth: 0.00 },
+};
+const rhyTransitionMatrix = {
+	Whole: { Eighth: 0.0, Sixteenth: 0.0 },
+	Half: { Eighth: 0.0, Sixteenth: 0.0 },
+	Quarter: { Eighth: 0.0, Sixteenth: 0.0 },
+	Eighth: { Eighth: 0.75, Sixteenth: 0.25 },
+	Sixteenth: { Eighth: 0.10, Sixteenth: 0.90 },
+};
+
+
+const generateMelody = (root: number) => {
+	totalScaleNotes.value = generateScale(root);
+	const melody = generateMarkovMelody(transitionMatrix, compositionSteps.value, root);
 	return melody;
 }
 
-const generateBass = () => {
-	const scale = generateScale(selectedNote.value-24);
-	const bass = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "bass");
-	return bass;
-}
-
-const generateHarmony = () => {
-	const scale = generateScale(selectedNote.value-0);
-	const harmony = generateMarkovMelody(scale, transitionMatrix, compositionSteps.value, "harmony");
-	return harmony;
-}
 
 const generateScale = (rootNote: number) => {
-	const intervals = scaleIntervals[selectedScale.value];
-	const scale = [rootNote];
-	let currentNote = rootNote;
-	intervals.forEach((interval) => {
-		currentNote += interval;
-		scale.push(currentNote);
-	});
-	return scale;
-}
+  const intervals = scaleIntervals[selectedScale.value];
+  const scale = [rootNote];
+  let currentNoteUp = rootNote;
+  let currentNoteDown = rootNote;
+  
+  // Generate notes upwards (higher pitches)
+  while (currentNoteUp <= 127) {
+    intervals.forEach((interval) => {
+      currentNoteUp += interval;
+      if (currentNoteUp <= 127) {
+        scale.push(currentNoteUp);
+      }
+    });
+  }
 
+  // Generate notes downwards (lower pitches)
+  while (currentNoteDown >= 0) {
+    intervals.reverse().forEach((interval) => {
+      currentNoteDown -= interval;
+      if (currentNoteDown >= 0) {
+        scale.unshift(currentNoteDown); // Prepend to maintain the order
+      }
+    });
+  }
 
+  return scale;
+};
 
 // TODO: stuff to move to their own files
 const selectedOscType = ref("sine");
 
 const adsrParams = reactive({
-	attack: { time: 0.05, volume: 0.1 },
-	decay: { time: 0.01, volume: 0.1 },
-	sustain: { time: 0.01, volume: 0.1 },
+	attack: { time: 0.05, volume: 0.04 },
+	decay: { time: 0.01, volume: 0.04 },
+	sustain: { time: 0.01, volume: 0.04 },
 	release: { time: 0.01, volume: 0.0 },
 });
 
@@ -146,9 +174,7 @@ const sliderUnits = reactive({
 });
 
 const timeBase = ref(16);
-const tempo = ref(40);
-const markEndPos = ref(32);
-const markStartPos = ref(0);
+const tempo = ref(75);
 
 //End TODO
 
@@ -161,31 +187,28 @@ const markStartPos = ref(0);
  * @param {number} [steps=16] - The number of steps (notes) in the generated melody. Defaults to 16.
  * @returns {any[]} - The generated melody as an array of notes.
  */
-function generateMarkovMelody(scale: any[], matrix: any[], steps: number, type: string) {
-	if(type == "melody") {
-		 
-	} else if(type == "bass") {
-		
-	} else if(type == "harmony") {
-
-	}
+function generateMarkovMelody( matrix: any[], steps: number, root: number) {
 
 	let melody: SequenceStep[] = [];
-	let currentIndex = Math.floor(Math.random() * scale.length);
+	let currentIndex = Math.floor(Math.random() * totalScaleNotes.value.length) %7;
 
 	for (let i = 0; i < steps; i++) {
 
 		if (currentIndex == 7) {
 			// this just bumps or dec octave
-			for (let x = 0; x < scale.length; x++) {
-				let oct = Math.random() > .5 ? 12 : -12
-				scale[x] += oct;
-			}
+			// for (let x = 0; x < totalScaleNotes.value.length; x++) {
+			// 	let oct = Math.random() > .5 ? 12 : -12
+			// 	totalScaleNotes.value[x] += oct;
+			// }
 		}
-		
-		melody.push(scale[currentIndex]);
 
-		// Choose next note based on probabilities
+		melody.push({
+			n: totalScaleNotes.value[currentIndex + root],
+			t: 0,
+			g: 0,
+			f: 0
+		});
+
 		const probabilities = matrix[currentIndex];
 		const rand = Math.random();
 		let cumulative = 0;
@@ -202,58 +225,139 @@ function generateMarkovMelody(scale: any[], matrix: any[], steps: number, type: 
 	return melody;
 }
 
-function generateRhythm(startState: keyof typeof NoteDurations, stepLimit: number) {
-  const rhythm = [];
+const generateRhythmSection = (startState: keyof typeof NoteDurations) => {
+  const root = [];
   let currentState = startState;
+
+  const barLength = 4;
+  const measureLength = Math.random() < 0.3 ? 32 : 32;
+
   let totalSteps = 0;
 
-  while (totalSteps < stepLimit) {
-    const duration = NoteDurations[currentState];
-    if (totalSteps + duration > stepLimit) break;
+  while (totalSteps < compositionSteps.value) {
+    let measure = []; // store the current measure's rhythm
+    let measureSteps = 0;
 
-    rhythm.push(duration);
-    totalSteps += duration;
+    //generate one measure of rhythm
+    while (measureSteps < measureLength) {
+      const duration = NoteDurations[currentState];
+      if (measureSteps + duration > measureLength) break;
 
-    currentState = selectNextState(currentState);
-  }
+      measure.push(duration);
+      measureSteps += duration;
+	  
 
-  return rhythm;
-}
+      currentState = selectNextStateRhy(currentState);
+    }
 
-function selectNextState(currentState: keyof typeof NoteDurations) {
-  const probabilities = rhyTransitionMatrix[currentState];
-  const random = Math.random();
-  let cumulative = 0;
+    // repeat the measure for the bar
+    for (let i = 0; i < barLength; i++) {
+      if (totalSteps + measureSteps > compositionSteps.value){
+		totalSteps++;
+		break;
+	  } 
 
-  for (const [state, probability] of Object.entries(probabilities)) {
-    cumulative += probability;
-    if (random < cumulative) {
-      return state;
+      root.push(...measure); // append the repeated measure
+      totalSteps += measureSteps;
     }
   }
+
+  return root;
+}
+
+function selectNextStateRhy(currentState: keyof typeof NoteDurations): keyof typeof NoteDurations {
+	const probabilities = rhyTransitionMatrix[currentState];
+	const random = Math.random();
+	let cumulative = 0;
+
+	for (const [state, probability] of Object.entries(probabilities)) {
+		cumulative += probability;
+		if (random < cumulative) {
+			return state as keyof typeof NoteDurations;
+		}
+	}
+	return currentState; // fallback to current state if no transition occurs
+}
+
+
+function generateBassSection(startState: keyof typeof NoteDurations) {
+	const root = [];
+	let currentState = startState;
+	let totalSteps = 0;
+	while (totalSteps < compositionSteps.value) {
+		const duration = NoteDurations[currentState];
+		if (totalSteps + duration > compositionSteps.value) break;
+
+		root.push(duration);
+		totalSteps += duration;
+
+		currentState = selectNextStateBass(currentState);
+	}
+	return root;
+}
+function selectNextStateBass(currentState: keyof typeof NoteDurations): keyof typeof NoteDurations {
+	const probabilities = bassTransitionMatrix[currentState];
+	const random = Math.random();
+	let cumulative = 0;
+
+	for (const [state, probability] of Object.entries(probabilities)) {
+		cumulative += probability;
+		if (random < cumulative) {
+			return state as keyof typeof NoteDurations;
+		}
+	}
+	return currentState; // fallback to current state if no transition occurs
+}
+
+
+function generateRoot(startState: keyof typeof NoteDurations) {
+	const root = [];
+	let currentState = startState;
+	let totalSteps = 0;
+	while (totalSteps < compositionSteps.value) {
+		const duration = NoteDurations[currentState];
+		if (totalSteps + duration > compositionSteps.value) break;
+
+		root.push(duration);
+		totalSteps += duration;
+
+		currentState = selectNextStateRoot(currentState);
+	}
+	return root;
+}
+function selectNextStateRoot(currentState: keyof typeof NoteDurations): keyof typeof NoteDurations {
+	const probabilities = rootTransitionMatrix[currentState];
+	const random = Math.random();
+	let cumulative = 0;
+
+	for (const [state, probability] of Object.entries(probabilities)) {
+		cumulative += probability;
+		if (random < cumulative) {
+			return state as keyof typeof NoteDurations;
+		}
+	}
+	return currentState; // fallback to current state if no transition occurs
 }
 
 const play = async (ev: any) => {
-	let gain = new GainNode(actx.value);//actx.value.createGain();
-	let osc = new OscillatorNode(actx.value);
-	// osc = actx.value.createOscillator();
+	let gain = new GainNode(actx.value!);//actx.value.createGain();
+	let osc = new OscillatorNode(actx.value!);
 	osc.onended = () => { // cleanup hook at end of playback
 		activeOscillators.value--;
 		osc.disconnect();
 		gain.disconnect();
 	};
-	
+
 	osc.type = selectedOscType.value as OscillatorType;
-	osc.connect(gain).connect(actx.value.destination); // connect to output
+	osc.connect(gain).connect(actx.value!.destination); // connect to output
 	let frequency = 440 * Math.pow(2, (ev.n - 69) / 12);
 	osc.frequency.setValueAtTime(frequency, ev.t); // note pitch
 	gain.gain.linearRampToValueAtTime(0, ev.t);// init at 0
 
-	let baseDuration = ev.t + (ev.g-ev.t)
-	//+ (ev.g / tempo.value / 4); // base note
+	let baseDuration = ev.t + (ev.g - ev.t)
 	// ADSR
 
-	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, baseDuration*1000 +
+	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, ev.t +
 		adsrParams.attack.time); // Attack
 	gain.gain.linearRampToValueAtTime(adsrParams.decay.volume, baseDuration +
 		adsrParams.attack.time + adsrParams.decay.time); // Decay
@@ -279,23 +383,173 @@ const handleStop = (): void => {
 	}
 }
 
-const handleRandom = (): void => {
-	const melody = generateMelody();
-	const bass = generateBass();
-	const harmony = generateHarmony();
-	const rhy1 = generateRhythm("Whole", compositionSteps.value);
-	
-	for (let i=0, j=0; j < melody.length && i < melody.length;j+=rhy1[i], i++) {
-		sequenceAutomated.value[i] = { t: j, n: melody[i], g: rhy1[i%rhy1.length], f: 0 };
-		sequenceAutomated.value[i + rhy1.length] = { t: j, n: bass[i], g: rhy1[i%rhy1.length], f: 0 };
-		sequenceAutomated.value[i + rhy1.length*2] = { t: j, n: harmony[i], g: rhy1[i%rhy1.length], f: 0 };
+function getHarmonicNote(baseNote: number, interval: string) {
+	const idx = totalScaleNotes.value.indexOf(baseNote);
+	// probably should just make this a map, but this is fine for now
+	switch(interval) {
+		case "thirteenth":
+			return totalScaleNotes.value[idx + 13];
+		case "twelveth":
+			return totalScaleNotes.value[idx + 12];
+		case "eleventh":
+			return totalScaleNotes.value[idx + 11];
+		case "tenth":
+			return totalScaleNotes.value[idx + 10];
+		case "ninth":
+			return totalScaleNotes.value[idx + 9];
+		case "octave":
+			return totalScaleNotes.value[idx + 8];
+		case "seventh":
+			return totalScaleNotes.value[idx + 7];
+		case "sixth":
+			return totalScaleNotes.value[idx + 6];
+		case "fifth":
+			return totalScaleNotes.value[idx + 5];
+		case "fourth":
+			return totalScaleNotes.value[idx + 4];
+		case "fifth":
+			return totalScaleNotes.value[idx + 3];
+		case "third":
+			return totalScaleNotes.value[idx + 2];
+		case "second":
+			return totalScaleNotes.value[idx + 1];
+		case "minthirteenth":
+			return totalScaleNotes.value[idx - 13];
+		case "mintwelveth":
+			return totalScaleNotes.value[idx - 12];
+		case "mineleventh":
+			return totalScaleNotes.value[idx - 11];
+		case "mintenth":
+			return totalScaleNotes.value[idx - 10];
+		case "minninth":
+			return totalScaleNotes.value[idx - 9];
+		case "minoctave":
+			return totalScaleNotes.value[idx - 8];
+		case "minseventh":
+			return totalScaleNotes.value[idx - 7];
+		case "minsixth":
+			return totalScaleNotes.value[idx - 6];
+		case "minfifth":
+			return totalScaleNotes.value[idx - 5];
+		case "minfourth":
+			return totalScaleNotes.value[idx - 4];
+		case "minfifth":
+			return totalScaleNotes.value[idx - 3];
+		case "minthird":
+			return totalScaleNotes.value[idx - 2];
+		case "minsecond":
+			return totalScaleNotes.value[idx - 1];
+		case "boctave":
+			return totalScaleNotes.value[idx - 16];
+		case "boctavefifth":
+			return totalScaleNotes.value[idx - 16 + 5];
+		case "boctavethird":
+			return totalScaleNotes.value[idx - 16 + 3];
+		default:
+			return baseNote;
 	}
-	console.log(melody);
-	console.log(bass);
-	console.log(harmony);
-	console.log(sequenceAutomated.value);
-	
+
 }
+
+const handleRandom = (): void => {
+	const harmony = generateMelody(selectedNote.value);
+	const rhy1 = generateRoot("Half");
+	const rhy2 = generateRhythmSection("Sixteenth");
+	const rhy3 = generateBassSection("Whole");
+
+
+	generateScale
+	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy1[i], i++) {
+		sequenceAutomatedPreLoop.value.push({ t: j, n: harmony[i].n, g: rhy1[i % rhy1.length], f: 0 });
+		if(rhy1[i % rhy1.length] > 1){
+			const randomValue = Math.random();
+
+			if (randomValue < rockGenre.fifth) {
+				sequenceAutomatedPreLoop.value.push({
+				t: j,
+				n: getHarmonicNote(harmony[i].n, "fifth"),
+				g: rhy1[i % rhy1.length],
+				f: 0,
+			});
+			} else if (randomValue < rockGenre.fifth + rockGenre.third) {
+				sequenceAutomatedPreLoop.value.push({
+				t: j,
+				n: getHarmonicNote(harmony[i].n, "minoctave"),
+				g: rhy1[i % rhy1.length],
+				f: 0,
+			});
+			} else {
+				sequenceAutomatedPreLoop.value.push({
+				t: j,
+				n: getHarmonicNote(harmony[i].n, "minthird"),
+				g: rhy1[i % rhy1.length],
+				f: 0,
+			});
+			sequenceAutomatedPreLoop.value.push({
+				t: j,
+				n: getHarmonicNote(harmony[i].n, "minseventh"),
+				g: rhy1[i % rhy1.length],
+				f: 0,
+			});
+			}
+		}
+	}
+	//harmony
+	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy2[i], i++) {
+		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "minoctave"), g: rhy2[i % rhy2.length], f: 0 });
+	}
+
+	//bass
+	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy3[i], i++) {
+		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "boctave"), g: rhy3[i % rhy3.length], f: 0 });
+	}
+	//sectioning
+	const midiLoop = saveChunks(sequenceAutomatedPreLoop.value, 32);
+	for (let i = 0; i < midiLoop.length; i++) {
+		sequenceAutomated.value.push({ t: midiLoop[i].t, n: midiLoop[i].n, g: midiLoop[i].g, f: midiLoop[i].f });
+	}
+	// AABCCBBAABBDDDD 
+}
+
+
+const order = ["A", "A", "B", "B", "C", "C", "B", "B", "A", "A", "D", "D", "D", "D"];
+
+
+const saveChunks = (sequence: any[], barLength: number) => {
+
+	const ranges = [
+		{ start: 0, end: 32 },
+		{ start: 32, end: 64 },
+		{ start: 64, end: 96 }, 
+		{ start: 96, end: 128 }, 
+		{ start: 128, end: 192 },
+	];
+
+  const chunks: { [key: string]: any[] } = {};
+  ranges.forEach((range, index) => {
+    chunks[String.fromCharCode(65 + index)] = sequence.filter(
+      event => event.t >= range.start && event.t < range.end
+    );
+  });
+
+  let reorderedSequence: any[] = [];
+  let currentTick = 0;
+
+  order.forEach(chunkLabel => {
+    const chunk = chunks[chunkLabel];
+    chunk.forEach(event => {
+      reorderedSequence.push({
+        ...event,
+        t: currentTick + (event.t - chunk[0].t),
+        originalT: event.t
+      });
+    });
+    currentTick += barLength;
+  });
+
+  return reorderedSequence;
+};
+
 
 const handlePlay = (): void => {
 	if (pianoRoll.value && actx.value) {
@@ -329,7 +583,7 @@ onMounted(() => {
 <template>
 	<div>
 		<Pianoroll ref="pianoRoll" :playCallback="Callback" :pianoHeight="700" :pianoWidth="300"
-			:sequence="sequenceAutomated" :tempo="tempo" :xRange="200" :yRange="200" :xOffset="0" :yOffset="2"
+			:sequence="sequenceAutomated" :tempo="tempo" :xRange="512" :yRange="200" :xOffset="0" :yOffset="2"
 			:timeBase="timeBase" :markEndPos="compositionSteps" :markStartPos="0">
 		</Pianoroll>
 
