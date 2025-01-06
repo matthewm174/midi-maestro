@@ -9,4 +9,8 @@ npm run dev
 
 select a scale, root note, hit the random generate button.
 
-![image](https://github.com/user-attachments/assets/5c1d0f25-080d-4dfc-9ae6-07f974f4cf01)
+
+
+
+https://github.com/user-attachments/assets/6e3ae3df-edfe-4843-af9b-d6db3cdadbd8
+
