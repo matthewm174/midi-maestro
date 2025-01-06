@@ -458,7 +458,7 @@ const handleRandom = (): void => {
 	const rhy3 = generateBassSection("Whole");
 
 
-	generateScale
+	//generateScale
 	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy1[i], i++) {
 		sequenceAutomatedPreLoop.value.push({ t: j, n: harmony[i].n, g: rhy1[i % rhy1.length], f: 0 });
 		if(rhy1[i % rhy1.length] > 1){
@@ -590,7 +590,7 @@ onMounted(() => {
 		<button label="Play" @click="handlePlay">PLAY</button>
 		<button label="Stop" @click="handleStop">STOP</button>
 		<button label="Random" @click="handleRandom">RANDOM GENERATE</button>
-		<!-- ADSR - to be componentized -->
+		<!-- ADSR and others to be componentized -->
 		<div>
 			<h1>ADSR Envelope</h1>
 			<div class="slider-container" v-for="(value, param) in adsrParams" :key="param">
