@@ -104,8 +104,8 @@ const rhyTransitionMatrix = {
 	Whole: { Eighth: 0.0, Sixteenth: 0.0 },
 	Half: { Eighth: 0.0, Sixteenth: 0.0 },
 	Quarter: { Eighth: 0.0, Sixteenth: 0.0 },
-	Eighth: { Eighth: 0.75, Sixteenth: 0.25 },
-	Sixteenth: { Eighth: 0.10, Sixteenth: 0.90 },
+	Eighth: { Eighth: 0.00, Sixteenth: 1.00 },
+	Sixteenth: { Eighth: 0.00, Sixteenth: 1.00 },
 };
 
 
@@ -230,7 +230,7 @@ const generateRhythmSection = (startState: keyof typeof NoteDurations) => {
   let currentState = startState;
 
   const barLength = 4;
-  const measureLength = Math.random() < 0.3 ? 32 : 32;
+  const measureLength = Math.random() < 0.3 ? 8 : 8;
 
   let totalSteps = 0;
 
@@ -354,11 +354,11 @@ const play = async (ev: any) => {
 	osc.frequency.setValueAtTime(frequency, ev.t); // note pitch
 	gain.gain.linearRampToValueAtTime(0, ev.t);// init at 0
 
-	let baseDuration = ev.t + (ev.g - ev.t)
+	let baseDuration = ev.t + (ev.g - ev.t);
 	// ADSR
 
-	gain.gain.linearRampToValueAtTime(adsrParams.attack.volume, ev.t +
-		adsrParams.attack.time); // Attack
+	gain.gain.linearRampToValueAtTime(0.1, ev.t +
+		0.0001); // Attack
 	gain.gain.linearRampToValueAtTime(adsrParams.decay.volume, baseDuration +
 		adsrParams.attack.time + adsrParams.decay.time); // Decay
 	gain.gain.linearRampToValueAtTime(adsrParams.sustain.volume, baseDuration +
@@ -370,7 +370,7 @@ const play = async (ev: any) => {
 	osc.start(ev.t);
 	activeOscillators.value++;
 	//end slightly after to taper
-	osc.stop(baseDuration + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time + .1);
+	osc.stop(baseDuration + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time -.1);
 };
 
 
@@ -454,7 +454,7 @@ function getHarmonicNote(baseNote: number, interval: string) {
 const handleRandom = (): void => {
 	const harmony = generateMelody(selectedNote.value);
 	const rhy1 = generateRoot("Half");
-	const rhy2 = generateRhythmSection("Sixteenth");
+	const rhy2 = generateRoot("Sixteenth");
 	const rhy3 = generateBassSection("Whole");
 
 
@@ -496,18 +496,19 @@ const handleRandom = (): void => {
 	}
 	//harmony
 	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy2[i], i++) {
-		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "minoctave"), g: rhy2[i % rhy2.length], f: 0 });
+		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "boctave"), g: rhy2[i % rhy2.length], f: 0 });
 	}
 
 	//bass
 	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy3[i], i++) {
-		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "boctave"), g: rhy3[i % rhy3.length], f: 0 });
+		sequenceAutomatedPreLoop.value.push({ t: j, n: getHarmonicNote(harmony[i].n, "root"), g: rhy3[i % rhy3.length], f: 0 });
 	}
 	//sectioning
 	const midiLoop = saveChunks(sequenceAutomatedPreLoop.value, 32);
 	for (let i = 0; i < midiLoop.length; i++) {
 		sequenceAutomated.value.push({ t: midiLoop[i].t, n: midiLoop[i].n, g: midiLoop[i].g, f: midiLoop[i].f });
 	}
+	console.log('sequenceAutomated', sequenceAutomated.value);
 	// AABCCBBAABBDDDD 
 }
 
