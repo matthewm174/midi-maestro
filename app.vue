@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import Pianoroll from './components/pianoroll.vue';
 const actx = ref<AudioContext>();
-
+import { Midi } from "@tonejs/midi";
 const pianoRoll = ref<InstanceType<typeof Pianoroll> | null>(null);
 const midiNotes = Array.from({ length: 128 }, (_, i) => i); // 0-127 midi notes
 
 const NoteDurations = {
 	Whole: 16,
 	Half: 8,
-	// QuartDot: 6,
+	HalfDot: 12,
+	QuartDot: 6,
 	Quarter: 4,
 	Eighth: 2,
-	// EighthTriplet: 3/2, leaving complicated rhythms for later
+	EighthTriplet: 3 / 2,
 	Sixteenth: 1,
 };
 
@@ -22,6 +23,9 @@ interface SequenceStep {
 	g: number;
 	f: number;
 }
+
+
+
 
 const totalScaleNotes = ref<number[]>([]);
 
@@ -67,9 +71,9 @@ const scaleIntervals: { [key: string]: number[] } = {
 
 
 const rockGenre = {
-  fifth: 0.75,
-  third: 0.2,
-  both: 0.05,
+	fifth: 0.75,
+	third: 0.2,
+	both: 0.05,
 };
 
 let transitionMatrix = [
@@ -86,28 +90,61 @@ let transitionMatrix = [
 ];
 
 const bassTransitionMatrix = {
-	Whole: { Whole: 0.5, Half: 0.4, Quarter: 0.10, Eighth: 0.0,  Sixteenth: 0.0 },
-	Half: { Whole: 0.2, Half: 0.3, Quarter: 0.50, Eighth: 0.0,  Sixteenth: 0.0 },
-	Quarter: { Whole: 0.3, Half: 0.2, Quarter: 0.5, Eighth: 0.0,  Sixteenth: 0.0 },
-	Eighth: { Whole: 0.0, Half: 0.0, Quarter: 1.0, Eighth: 0.0,  Sixteenth: 0.0 },
-	Sixteenth: { Whole: 0.0, Half: 0.0, Quarter: 1.0, Eighth: 0.0, Sixteenth: 0.00 },
+	Whole: { Whole: 0.2, Half: 0.4, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.0, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Half: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	HalfDot: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	Quarter: { Whole: 0.2, Half: 0.2, Quarter: 0.2, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.1 },
+	QuartDot: { Whole: 0.2, Half: 0.2, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Eighth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	EighthTriplet: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	Sixteenth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.1, EighthTriplet: 0.0, Sixteenth: 0.8 },
 };
 
 const rootTransitionMatrix = {
-	Whole: { Whole: 0.2, Half: 0.4, Quarter: 0.15, Eighth: 0.25,  Sixteenth: 0.0 },
-	Half: { Whole: 0.2, Half: 0.15, Quarter: 0.40, Eighth: 0.25,  Sixteenth: 0.0 },
-	Quarter: { Whole: 0.3, Half: 0.2, Quarter: 0.25, Eighth: 0.25,  Sixteenth: 0.0 },
-	Eighth: { Whole: 0.4, Half: 0.1, Quarter: 0.25, Eighth: 0.25,  Sixteenth: 0.0 },
-	Sixteenth: { Whole: 0.2, Half: 0.15, Quarter: 0.40, Eighth: 0.25, Sixteenth: 0.00 },
+	Whole: { Whole: 0.2, Half: 0.4, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.0, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Half: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	HalfDot: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	Quarter: { Whole: 0.2, Half: 0.2, Quarter: 0.2, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.1 },
+	QuartDot: { Whole: 0.2, Half: 0.2, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Eighth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	EighthTriplet: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	Sixteenth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.1, EighthTriplet: 0.0, Sixteenth: 0.8 },
 };
 const rhyTransitionMatrix = {
-	Whole: { Eighth: 0.0, Sixteenth: 0.0 },
-	Half: { Eighth: 0.0, Sixteenth: 0.0 },
-	Quarter: { Eighth: 0.0, Sixteenth: 0.0 },
-	Eighth: { Eighth: 0.00, Sixteenth: 1.00 },
-	Sixteenth: { Eighth: 0.00, Sixteenth: 1.00 },
+	Whole: { Whole: 0.2, Half: 0.4, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.0, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Half: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	HalfDot: { Whole: 0.1, Half: 0.3, Quarter: 0.4, QuartDot: 0.1, Eighth: 0.05, EighthTriplet: 0.0, Sixteenth: 0.05 },
+	Quarter: { Whole: 0.2, Half: 0.2, Quarter: 0.2, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.1 },
+	QuartDot: { Whole: 0.2, Half: 0.2, Quarter: 0.3, QuartDot: 0.1, Eighth: 0.2, EighthTriplet: 0.0, Sixteenth: 0.0 },
+	Eighth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	EighthTriplet: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.3, EighthTriplet: 0.0, Sixteenth: 0.6 },
+	Sixteenth: { Whole: 0.0, Half: 0.0, Quarter: 0.0, QuartDot: 0.1, Eighth: 0.1, EighthTriplet: 0.0, Sixteenth: 0.8 },
 };
 
+const exportMidi = (fileName: string) => {
+	const midi = new Midi();
+	const track = midi.addTrack();
+
+
+	sequenceAutomated.value.forEach((step) => {
+		track.addNote({
+			midi: step.n,
+			time: step.t,
+			duration: step.g,
+			velocity: 100,
+		});
+	});
+
+	const midiBlob = new Blob([midi.toArray()], { type: "audio/midi" });
+
+	// Trigger file download
+	const link = document.createElement("a");
+	link.href = URL.createObjectURL(midiBlob);
+	link.download = fileName;
+	document.body.appendChild(link);
+	link.click();
+	document.body.removeChild(link);
+}
 
 const generateMelody = (root: number) => {
 	totalScaleNotes.value = generateScale(root);
@@ -117,32 +154,32 @@ const generateMelody = (root: number) => {
 
 
 const generateScale = (rootNote: number) => {
-  const intervals = scaleIntervals[selectedScale.value];
-  const scale = [rootNote];
-  let currentNoteUp = rootNote;
-  let currentNoteDown = rootNote;
-  
-  // Generate notes upwards (higher pitches)
-  while (currentNoteUp <= 127) {
-    intervals.forEach((interval) => {
-      currentNoteUp += interval;
-      if (currentNoteUp <= 127) {
-        scale.push(currentNoteUp);
-      }
-    });
-  }
+	const intervals = scaleIntervals[selectedScale.value];
+	const scale = [rootNote];
+	let currentNoteUp = rootNote;
+	let currentNoteDown = rootNote;
 
-  // Generate notes downwards (lower pitches)
-  while (currentNoteDown >= 0) {
-    intervals.reverse().forEach((interval) => {
-      currentNoteDown -= interval;
-      if (currentNoteDown >= 0) {
-        scale.unshift(currentNoteDown); // Prepend to maintain the order
-      }
-    });
-  }
+	// Generate notes upwards (higher pitches)
+	while (currentNoteUp <= 127) {
+		intervals.forEach((interval) => {
+			currentNoteUp += interval;
+			if (currentNoteUp <= 127) {
+				scale.push(currentNoteUp);
+			}
+		});
+	}
 
-  return scale;
+	// Generate notes downwards (lower pitches)
+	while (currentNoteDown >= 0) {
+		intervals.reverse().forEach((interval) => {
+			currentNoteDown -= interval;
+			if (currentNoteDown >= 0) {
+				scale.unshift(currentNoteDown); // Prepend to maintain the order
+			}
+		});
+	}
+
+	return scale;
 };
 
 // TODO: stuff to move to their own files
@@ -174,7 +211,7 @@ const sliderUnits = reactive({
 });
 
 const timeBase = ref(16);
-const tempo = ref(75);
+const tempo = ref(100);
 
 //End TODO
 
@@ -187,20 +224,12 @@ const tempo = ref(75);
  * @param {number} [steps=16] - The number of steps (notes) in the generated melody. Defaults to 16.
  * @returns {any[]} - The generated melody as an array of notes.
  */
-function generateMarkovMelody( matrix: any[], steps: number, root: number) {
+function generateMarkovMelody(matrix: any[], steps: number, root: number) {
 
 	let melody: SequenceStep[] = [];
-	let currentIndex = Math.floor(Math.random() * totalScaleNotes.value.length) %7;
+	let currentIndex = Math.floor(Math.random() * totalScaleNotes.value.length) % 7;
 
 	for (let i = 0; i < steps; i++) {
-
-		if (currentIndex == 7) {
-			// this just bumps or dec octave
-			// for (let x = 0; x < totalScaleNotes.value.length; x++) {
-			// 	let oct = Math.random() > .5 ? 12 : -12
-			// 	totalScaleNotes.value[x] += oct;
-			// }
-		}
 
 		melody.push({
 			n: totalScaleNotes.value[currentIndex + root],
@@ -226,43 +255,44 @@ function generateMarkovMelody( matrix: any[], steps: number, root: number) {
 }
 
 const generateRhythmSection = (startState: keyof typeof NoteDurations) => {
-  const root = [];
-  let currentState = startState;
+	const root = [];
+	let currentState = startState;
 
-  const barLength = 4;
-  const measureLength = Math.random() < 0.3 ? 8 : 8;
+	const barLength = 4;
+	const measureLength = Math.random() < 0.3 ? 8 : 8;
 
-  let totalSteps = 0;
+	let totalSteps = 0;
 
-  while (totalSteps < compositionSteps.value) {
-    let measure = []; // store the current measure's rhythm
-    let measureSteps = 0;
+	while (totalSteps < compositionSteps.value) {
+		let measure = []; // store the current measure's rhythm
+		let measureSteps = 0;
 
-    //generate one measure of rhythm
-    while (measureSteps < measureLength) {
-      const duration = NoteDurations[currentState];
-      if (measureSteps + duration > measureLength) break;
+		//generate one measure of rhythm
+		while (measureSteps < measureLength) {
+			currentState = selectNextStateRhy(currentState);
+			const duration = NoteDurations[currentState];
+			if (measureSteps + duration > measureLength) break;
 
-      measure.push(duration);
-      measureSteps += duration;
-	  
+			measure.push(duration);
+			measureSteps += duration;
 
-      currentState = selectNextStateRhy(currentState);
-    }
 
-    // repeat the measure for the bar
-    for (let i = 0; i < barLength; i++) {
-      if (totalSteps + measureSteps > compositionSteps.value){
-		totalSteps++;
-		break;
-	  } 
+			
+		}
 
-      root.push(...measure); // append the repeated measure
-      totalSteps += measureSteps;
-    }
-  }
+		// repeat the measure for the bar
+		for (let i = 0; i < barLength; i++) {
+			if (totalSteps + measureSteps > compositionSteps.value) {
+				totalSteps+=measureSteps;
+				break;
+			}
 
-  return root;
+			root.push(...measure); // append the repeated measure
+			totalSteps += measureSteps;
+		}
+	}
+
+	return root;
 }
 
 function selectNextStateRhy(currentState: keyof typeof NoteDurations): keyof typeof NoteDurations {
@@ -340,7 +370,7 @@ function selectNextStateRoot(currentState: keyof typeof NoteDurations): keyof ty
 }
 
 const play = async (ev: any) => {
-	let gain = new GainNode(actx.value!);//actx.value.createGain();
+	let gain = new GainNode(actx.value!);
 	let osc = new OscillatorNode(actx.value!);
 	osc.onended = () => { // cleanup hook at end of playback
 		activeOscillators.value--;
@@ -370,7 +400,7 @@ const play = async (ev: any) => {
 	osc.start(ev.t);
 	activeOscillators.value++;
 	//end slightly after to taper
-	osc.stop(baseDuration + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time -.1);
+	osc.stop(baseDuration + adsrParams.sustain.time + adsrParams.release.time + adsrParams.attack.time + adsrParams.decay.time - .1);
 };
 
 
@@ -386,7 +416,7 @@ const handleStop = (): void => {
 function getHarmonicNote(baseNote: number, interval: string) {
 	const idx = totalScaleNotes.value.indexOf(baseNote);
 	// probably should just make this a map, but this is fine for now
-	switch(interval) {
+	switch (interval) {
 		case "thirteenth":
 			return totalScaleNotes.value[idx + 13];
 		case "twelveth":
@@ -454,43 +484,43 @@ function getHarmonicNote(baseNote: number, interval: string) {
 const handleRandom = (): void => {
 	const harmony = generateMelody(selectedNote.value);
 	const rhy1 = generateRoot("Half");
-	const rhy2 = generateRoot("Sixteenth");
+	const rhy2 = generateRhythmSection("Sixteenth");
 	const rhy3 = generateBassSection("Whole");
 
 
 	//generateScale
 	for (let i = 0, j = 0; j < harmony.length && i < harmony.length; j += rhy1[i], i++) {
 		sequenceAutomatedPreLoop.value.push({ t: j, n: harmony[i].n, g: rhy1[i % rhy1.length], f: 0 });
-		if(rhy1[i % rhy1.length] > 1){
+		if (rhy1[i % rhy1.length] > 1) {
 			const randomValue = Math.random();
 
 			if (randomValue < rockGenre.fifth) {
 				sequenceAutomatedPreLoop.value.push({
-				t: j,
-				n: getHarmonicNote(harmony[i].n, "fifth"),
-				g: rhy1[i % rhy1.length],
-				f: 0,
-			});
+					t: j,
+					n: getHarmonicNote(harmony[i].n, "fifth"),
+					g: rhy1[i % rhy1.length],
+					f: 0,
+				});
 			} else if (randomValue < rockGenre.fifth + rockGenre.third) {
 				sequenceAutomatedPreLoop.value.push({
-				t: j,
-				n: getHarmonicNote(harmony[i].n, "minoctave"),
-				g: rhy1[i % rhy1.length],
-				f: 0,
-			});
+					t: j,
+					n: getHarmonicNote(harmony[i].n, "minoctave"),
+					g: rhy1[i % rhy1.length],
+					f: 0,
+				});
 			} else {
 				sequenceAutomatedPreLoop.value.push({
-				t: j,
-				n: getHarmonicNote(harmony[i].n, "minthird"),
-				g: rhy1[i % rhy1.length],
-				f: 0,
-			});
-			sequenceAutomatedPreLoop.value.push({
-				t: j,
-				n: getHarmonicNote(harmony[i].n, "minseventh"),
-				g: rhy1[i % rhy1.length],
-				f: 0,
-			});
+					t: j,
+					n: getHarmonicNote(harmony[i].n, "minthird"),
+					g: rhy1[i % rhy1.length],
+					f: 0,
+				});
+				sequenceAutomatedPreLoop.value.push({
+					t: j,
+					n: getHarmonicNote(harmony[i].n, "minseventh"),
+					g: rhy1[i % rhy1.length],
+					f: 0,
+				});
 			}
 		}
 	}
@@ -521,34 +551,34 @@ const saveChunks = (sequence: any[], barLength: number) => {
 	const ranges = [
 		{ start: 0, end: 32 },
 		{ start: 32, end: 64 },
-		{ start: 64, end: 96 }, 
-		{ start: 96, end: 128 }, 
+		{ start: 64, end: 96 },
+		{ start: 96, end: 128 },
 		{ start: 128, end: 192 },
 	];
 
-  const chunks: { [key: string]: any[] } = {};
-  ranges.forEach((range, index) => {
-    chunks[String.fromCharCode(65 + index)] = sequence.filter(
-      event => event.t >= range.start && event.t < range.end
-    );
-  });
+	const chunks: { [key: string]: any[] } = {};
+	ranges.forEach((range, index) => {
+		chunks[String.fromCharCode(65 + index)] = sequence.filter(
+			event => event.t >= range.start && event.t < range.end
+		);
+	});
 
-  let reorderedSequence: any[] = [];
-  let currentTick = 0;
+	let reorderedSequence: any[] = [];
+	let currentTick = 0;
 
-  order.forEach(chunkLabel => {
-    const chunk = chunks[chunkLabel];
-    chunk.forEach(event => {
-      reorderedSequence.push({
-        ...event,
-        t: currentTick + (event.t - chunk[0].t),
-        originalT: event.t
-      });
-    });
-    currentTick += barLength;
-  });
+	order.forEach(chunkLabel => {
+		const chunk = chunks[chunkLabel];
+		chunk.forEach(event => {
+			reorderedSequence.push({
+				...event,
+				t: currentTick + (event.t - chunk[0].t),
+				originalT: event.t
+			});
+		});
+		currentTick += barLength;
+	});
 
-  return reorderedSequence;
+	return reorderedSequence;
 };
 
 
@@ -591,6 +621,8 @@ onMounted(() => {
 		<button label="Play" @click="handlePlay">PLAY</button>
 		<button label="Stop" @click="handleStop">STOP</button>
 		<button label="Random" @click="handleRandom">RANDOM GENERATE</button>
+		<button @click="exportMidi('generated.midi')">Download MIDI</button>
+
 		<!-- ADSR and others to be componentized -->
 		<div>
 			<h1>ADSR Envelope</h1>
