@@ -124,14 +124,14 @@ const rhyTransitionMatrix = {
 const exportMidi = (fileName: string) => {
 	const midi = new Midi();
 	const track = midi.addTrack();
-
+	midi.header.setTempo(tempo.value);
 
 	sequenceAutomated.value.forEach((step) => {
 		track.addNote({
 			midi: step.n,
 			time: step.t,
 			duration: step.g,
-			velocity: 100,
+			velocity: 100/127,
 		});
 	});
 
@@ -211,7 +211,7 @@ const sliderUnits = reactive({
 });
 
 const timeBase = ref(16);
-const tempo = ref(100);
+const tempo = ref(150);
 
 //End TODO
 
